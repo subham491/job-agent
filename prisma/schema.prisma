@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// The job seeker. Single-user for now, but keyed so more can be added later.
+model Profile {
+  id               String   @id @default(uuid())
+  fullName         String
+  email            String   @unique
+  phone            String?
+  headline         String?
+  totalExpMonths   Int      @default(0)
+  skills           String[]
+  currentLocation  String?
+  preferredCities  String[]
+  currentCtcLpa    Decimal? @db.Decimal(6, 2)
+  expectedCtcLpa   Decimal? @db.Decimal(6, 2)
+  noticePeriodDays Int?
+  /// Structured resume facts (experience, projects, education). Tailoring may only use what is in here.
+  resumeData       Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  credentials  SiteCredential[]
+  applications Application[]
+  matches      JobMatch[]
+}
+
+enum Site {
+  NAUKRI
+  HIRIST
+  INSTAHYRE
+  GREENHOUSE
+  LEVER
+  ASHBY
+  JSEARCH
+  ADZUNA
+  MANUAL
+}
+
+/// Login for a job site. Secret fields are AES-256-GCM encrypted by VaultService; never stored in plain text.
+model SiteCredential {
+  id              String    @id @default(uuid())
+  profileId       String
+  site            Site
+  username        String
+  secretEncrypted String
+  /// Encrypted cookies/tokens so we log in as rarely as possible.
+  sessionEncrypted String?
+  sessionExpiresAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, site])
+}
+
+model Job {
+  id           String    @id @default(uuid())
+  site         Site
+  /// The site's own job id.
+  externalId   String
+  /// Hash of normalised company + title + location, used to spot the same job on two sites.
+  dedupeKey    String
+  title        String
+  company      String
+  location     String?
+  minExpYears  Int?
+  maxExpYears  Int?
+  salaryText   String?
+  skills       String[]
+  description  String?
+  url          String
+  applyUrl     String?
+  postedAt     DateTime?
+  raw          Json?
+  firstSeenAt  DateTime  @default(now())
+  lastSeenAt   DateTime  @default(now())
+
+  matches      JobMatch[]
+  applications Application[]
+
+  @@unique([site, externalId])
+  @@index([dedupeKey])
+  @@index([postedAt])
+}
+
+/// How well a job fits a profile, with the reasons shown to the user.
+model JobMatch {
+  id        String   @id @default(uuid())
+  profileId String
+  jobId     String
+  score     Int
+  reasons   String[]
+  gaps      String[]
+  dismissed Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  job     Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, jobId])
+  @@index([profileId, score])
+}
+
+enum ApplicationStatus {
+  FOUND
+  SHORTLISTED
+  /// Resume and answers are prepared and waiting for the user to approve.
+  READY_FOR_REVIEW
+  APPROVED
+  /// Automation stopped at a CAPTCHA, OTP or unknown screen and needs the user.
+  NEEDS_USER
+  APPLIED
+  INTERVIEW
+  OFFER
+  REJECTED
+  WITHDRAWN
+}
+
+model Application {
+  id           String            @id @default(uuid())
+  profileId    String
+  jobId        String
+  status       ApplicationStatus @default(FOUND)
+  resumeText   String?
+  coverLetter  String?
+  /// Answers to form questions (expected CTC, notice period, etc.) for the user to review.
+  answers      Json?
+  /// Set only when the user approves. Nothing is submitted while this is null.
+  approvedAt   DateTime?
+  appliedAt    DateTime?
+  notes        String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  job     Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, jobId])
+  @@index([status])
+}
