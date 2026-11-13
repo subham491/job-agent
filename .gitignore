@@ -7,3 +7,5 @@ dist
 coverage
 # Playwright browser profiles hold live login sessions. Never commit.
 .browser-profiles
+# Design tool working files
+.hallmark

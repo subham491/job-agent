@@ -1,0 +1,64 @@
+<ng-template #nav>
+  @for (v of views; track v.id) {
+    <button type="button" class="nav-btn" [attr.aria-current]="store.view() === v.id ? 'page' : null" (click)="go(v.id)">
+      <app-icon [name]="v.icon" />
+      <span>{{ v.label }}</span>
+      @if (v.id === 'board' && store.needsYou()) { <span class="nav-count is-hot">{{ store.needsYou() }}</span> }
+    </button>
+  }
+</ng-template>
+
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="brand-mark"><app-icon name="wing" /></span><span class="brand-name">Job Agent</span></div>
+    <nav class="nav" aria-label="Screens"><ng-container *ngTemplateOutlet="nav" /></nav>
+    <div class="side-foot">
+      <p class="note">Everything here acts on the live Naukri account. Chrome opens by itself while the agent works.</p>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <div class="brand"><span class="brand-mark"><app-icon name="wing" /></span></div>
+      <h1>{{ title() }}</h1>
+      <span class="top-space"></span>
+      <button
+        type="button"
+        class="angel"
+        role="switch"
+        [attr.aria-checked]="store.settings().angelMode"
+        [title]="store.settings().angelMode ? 'Angel mode is on: the agent answers recruiter questions itself' : 'Angel mode is off: unknown questions wait for you'"
+        (click)="store.setAngel(!store.settings().angelMode)"
+      >
+        <app-icon name="wing" />
+        <span class="txt">Angel<span class="long"> mode</span></span>
+        <span class="knob" aria-hidden="true"></span>
+      </button>
+      <button type="button" class="btn" [disabled]="store.fetching()" (click)="store.fetchJobs()">
+        <span>{{ store.fetching() ? 'Fetching…' : 'Fetch' }}<span class="long"> new jobs</span></span>
+      </button>
+    </header>
+
+    <main class="content">
+      <div class="view">
+        @switch (store.view()) {
+          @case ('matches') { <app-matches /> }
+          @case ('board') { <app-board /> }
+          @case ('profile') { <app-profile /> }
+          @case ('answers') { <app-answers /> }
+        }
+      </div>
+    </main>
+  </div>
+</div>
+
+<nav class="bottom" aria-label="Screens"><ng-container *ngTemplateOutlet="nav" /></nav>
+
+<div class="toasts" role="status" aria-live="polite">
+  @for (t of store.toasts(); track t.id) {
+    <div class="toast">
+      <span>{{ t.text }}</span>
+      @if (t.undo) { <button type="button" (click)="t.undo(); store.dropToast(t.id)">Undo</button> }
+    </div>
+  }
+</div>

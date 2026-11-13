@@ -23,6 +23,8 @@ model Profile {
   noticePeriodDays Int?
   /// Structured resume facts (experience, projects, education). Tailoring may only use what is in here.
   resumeData       Json?
+  /// Angel mode: when on, the agent answers recruiter questions it has no saved answer for, instead of waiting for the user.
+  angelMode        Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -146,4 +148,27 @@ model Application {
 
   @@unique([profileId, jobId])
   @@index([status])
+}
+
+/// One row per day (India time): how often recruiters' searches showed the Naukri profile, and when the agent refreshed it.
+model NaukriDay {
+  date        DateTime  @id @db.Date
+  /// Search appearances that day, as Naukri reports them. Null until Naukri has the figure.
+  appearances Int?
+  /// When the agent re-saved the profile that day, which is what keeps it fresh in recruiter searches.
+  refreshedAt DateTime?
+  note        String?
+}
+
+/// The answer bank: what to reply when a recruiter asks this question during an application.
+model Answer {
+  id        String   @id @default(uuid())
+  /// The question lower-cased with spaces collapsed, so the same question matches whatever its spacing or case.
+  key       String   @unique
+  question  String
+  answer    String
+  /// Who wrote it: "profile" (from the Naukri profile), "user" (typed in the app) or "angel" (written by Angel mode).
+  source    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

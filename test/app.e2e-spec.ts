@@ -7,7 +7,12 @@ import { PrismaService } from './../src/prisma/prisma.service.js';
 
 describe('Health (e2e)', () => {
   let app: INestApplication<App>;
-  const prisma = { $queryRaw: vi.fn(), $disconnect: vi.fn() };
+  const prisma = {
+    $queryRaw: vi.fn(),
+    $disconnect: vi.fn(),
+    // ApplyService hands back applications a restart interrupted, at start-up.
+    application: { updateMany: vi.fn() },
+  };
 
   beforeEach(async () => {
     process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';

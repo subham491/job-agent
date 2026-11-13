@@ -1,15 +1,16 @@
-# Job Agent (backend)
+# Job Agent
 
-Personal job-search agent for the Indian market. This is the Node backend: it will find jobs on Naukri, Hirist and other sites, score them against your profile, prepare tailored applications, and submit only after you approve.
+Personal job-search agent for the Indian market. It finds jobs on Naukri, scores them against the job seeker's own Naukri profile, applies after you press Apply, answers recruiter questions, and keeps the profile visible to recruiters. Other sites come later.
 
-Target sites and ground rules are in the Claude project doc `claude/target-sites.md`.
+Target sites and ground rules are in `docs/target-sites.md`. Project context and decisions are in `CLAUDE.md`.
 
 ## Stack
 
-- NestJS 12 + TypeScript (ESM)
-- PostgreSQL + Prisma
-- Vitest for tests
-- Planned: Playwright (browser automation), pg-boss (scheduled jobs), Angular PWA frontend in a separate folder
+- Backend: NestJS 12 + TypeScript (ESM), PostgreSQL + Prisma, Vitest
+- Screens: Angular 22 in `web/`, served by the backend, installable as a PWA
+- Playwright driving a visible Chrome window for Naukri
+- pg-boss for the daily schedule
+- Anthropic API for Angel mode and Profile boost
 
 ## Run it
 
@@ -21,12 +22,27 @@ cp .env.example .env
 openssl rand -base64 32
 
 npm install
-npm run db:up        # starts Postgres in Docker
-npm run db:migrate   # creates the tables (name the first migration "init")
-npm run start:dev
+npm --prefix web install
+npm run db:up        # starts Postgres in Docker (skip if Postgres is installed on the PC)
+npm run db:migrate   # creates the tables
+npm run app          # builds the Angular screens and the backend, then starts the app
 ```
 
-Check it: `curl http://localhost:3000/api/health` should return `{"status":"ok","db":"up"}`.
+Open `http://localhost:3000`. The screens are the Angular app in `web/`, served by the backend.
+Check the API alone: `curl http://localhost:3000/api/health` should return `{"status":"ok","db":"up"}`.
+
+The agent drives a visible Chrome window (Naukri blocks headless browsers), so Chrome must be installed and the PC must be on and unlocked while it works.
+
+Settings in `.env`:
+
+| Name | What it does |
+|---|---|
+| `NAUKRI_USERNAME`, `NAUKRI_PASSWORD` | The Naukri login the agent uses |
+| `ANTHROPIC_API_KEY` | Switches on Angel mode and Profile boost. Without it they are off |
+| `AI_MODEL` | Optional. Defaults to `claude-opus-5-5` |
+| `NAUKRI_REFRESH_CRON` | Optional. Runs the daily routine by itself, e.g. `0 9-21 * * *` (India time, once a day) |
+
+While changing the screens, run `npm run start:dev` and `npm run web:dev` together and open `http://localhost:4200`.
 
 ## Tests
 
@@ -34,28 +50,35 @@ Check it: `curl http://localhost:3000/api/health` should return `{"status":"ok",
 npm test          # unit tests
 npm run test:e2e  # API tests (database is mocked)
 npm run lint
+npm run web:build # compiles the Angular screens
 ```
 
 ## What is here
 
 | Path | What it does |
 |---|---|
-| `prisma/schema.prisma` | Tables: `Profile`, `SiteCredential`, `Job`, `JobMatch`, `Application` |
-| `src/config/env.ts` | Checks `.env` at startup and refuses to start if something is wrong |
+| `prisma/schema.prisma` | Tables: `Profile`, `SiteCredential`, `Job`, `JobMatch`, `Application`, `Answer`, `NaukriDay` |
+| `src/connectors/naukri/` | Everything done on Naukri: search, postings, login, profile, performance, editing key skills and headline, applying |
+| `src/jobs/` | Saving jobs, scoring them against the profile, the match list |
+| `src/apply/` | The apply queue, the answer bank and Angel mode |
+| `src/profile/` | Profile import, the recruiter-search report, the daily routine and Profile boost |
+| `src/ai/` | The one place that calls Claude |
 | `src/vault/` | AES-256-GCM encryption for site passwords and session cookies |
-| `src/connectors/job-connector.ts` | The contract every job site connector implements |
-| `src/jobs/dedupe.ts` | Spots the same job posted on two sites |
-| `src/health/` | `GET /api/health` |
+| `src/config/env.ts` | Checks `.env` at startup and refuses to start if something is wrong |
+| `web/` | The Angular screens: Matches, Board, Profile, Answers |
+
+## Using it
+
+1. **Profile, then Daily routine, Run now** the first time. It imports the Naukri profile.
+2. **Fetch new jobs** searches Naukri for the profile's desired roles and preferred cities, posted in the last day.
+3. **Apply** on a job sends a real application in the background. It cannot be withdrawn.
+4. **Board** shows where each application stands. A job under "Needs you" is waiting on a recruiter question; your answer is saved and reused.
+5. **Angel mode** (top bar) lets the agent answer unknown questions itself. It never claims a skill that is not on the profile.
 
 ## Rules the code must keep
 
-1. Site passwords and sessions are stored only through `VaultService`. Never in plain text, never in logs.
-2. Nothing is submitted unless `Application.approvedAt` is set by the user.
-3. On a CAPTCHA, OTP or unknown screen, a connector throws `NeedsUserError` and stops. No bypassing.
-4. No LinkedIn or Wellfound login automation.
+The full list is in `CLAUDE.md`. In short: nothing is submitted without the user's Apply press, the agent stops on a CAPTCHA or OTP instead of working around it, it never invents facts about the job seeker, and it keeps to 15 applications a day with one per company.
 
-## Next
+## Not built yet
 
-1. Naukri connector: login, search with filters, full posting.
-2. Save jobs with dedupe, then score them against the profile.
-3. Angular PWA: job list, job detail, approve screen.
+Sign-in, more than one user, phone access through a tunnel, sites other than Naukri, company-site applications, resume tailoring, Gmail and Calendar.
